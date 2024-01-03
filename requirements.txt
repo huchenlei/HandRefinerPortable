@@ -1,0 +1,3 @@
+rtree
+mediapipe
+trimesh[easy]
