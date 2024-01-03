@@ -19,7 +19,6 @@ import mesh_graphormer.modeling.data.config as cfg
 
 
 sparse_to_dense = lambda x: x
-device = "cuda"
 
 class SMPL(nn.Module):
 
@@ -160,8 +159,6 @@ class SparseMM(torch.autograd.Function):
         return None, grad_input
 
 def spmm(sparse, dense):
-    sparse = sparse.to(device)
-    dense = dense.to(device)
     return SparseMM.apply(sparse, dense)
 
 

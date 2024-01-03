@@ -21,7 +21,6 @@ from pathlib import Path
 
 
 sparse_to_dense = lambda x: x
-device = "cuda"
 
 class MANO(nn.Module):
     def __init__(self):
@@ -84,8 +83,6 @@ class SparseMM(torch.autograd.Function):
         return None, grad_input
 
 def spmm(sparse, dense):
-    sparse = sparse.to(device)
-    dense = dense.to(device)
     return SparseMM.apply(sparse, dense)
 
 

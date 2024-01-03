@@ -9,7 +9,6 @@ data_path = Path(__file__).parent / "data"
 
 
 sparse_to_dense = lambda x: x
-device = "cuda"
 
 class SparseMM(torch.autograd.Function):
     """Redefine sparse @ dense matrix multiplication to enable backpropagation.
@@ -30,8 +29,6 @@ class SparseMM(torch.autograd.Function):
         return None, grad_input
 
 def spmm(sparse, dense):
-    sparse = sparse.to(device)
-    dense = dense.to(device)
     return SparseMM.apply(sparse, dense)
 
 
@@ -63,12 +60,12 @@ class GraphResBlock(torch.nn.Module):
     """
     Graph Residual Block similar to the Bottleneck Residual Block in ResNet
     """
-    def __init__(self, in_channels, out_channels, mesh_type='body'):
+    def __init__(self, in_channels, out_channels, mesh_type='body', device="cuda"):
         super(GraphResBlock, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
         self.lin1 = GraphLinear(in_channels, out_channels // 2)
-        self.conv = GraphConvolution(out_channels // 2, out_channels // 2, mesh_type)
+        self.conv = GraphConvolution(out_channels // 2, out_channels // 2, mesh_type, device=device)
         self.lin2 = GraphLinear(out_channels // 2, out_channels)
         self.skip_conv = GraphLinear(in_channels, out_channels)
         # print('Use BertLayerNorm in GraphResBlock')
@@ -130,10 +127,11 @@ class GraphLinear(torch.nn.Module):
 
 class GraphConvolution(torch.nn.Module):
     """Simple GCN layer, similar to https://arxiv.org/abs/1609.02907."""
-    def __init__(self, in_features, out_features, mesh='body', bias=True):
+    def __init__(self, in_features, out_features, mesh='body', bias=True, device="cuda"):
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
+        self.device = device
 
         if mesh=='body':
             adj_indices = torch.load(data_path / 'smpl_431_adjmat_indices.pt')
@@ -144,7 +142,7 @@ class GraphConvolution(torch.nn.Module):
             adj_mat_value = torch.load(data_path / 'mano_195_adjmat_values.pt')
             adj_mat_size = torch.load(data_path / 'mano_195_adjmat_size.pt')
 
-        self.adjmat = sparse_to_dense(torch.sparse_coo_tensor(adj_indices, adj_mat_value, size=adj_mat_size)).to(device)
+        self.adjmat = sparse_to_dense(torch.sparse_coo_tensor(adj_indices, adj_mat_value, size=adj_mat_size)).to(self.device)
 
         self.weight = torch.nn.Parameter(torch.FloatTensor(in_features, out_features))
         if bias:
@@ -172,7 +170,7 @@ class GraphConvolution(torch.nn.Module):
             for i in range(x.shape[0]):
                 support = torch.matmul(x[i], self.weight)
                 # output.append(torch.matmul(self.adjmat, support))
-                output.append(spmm(self.adjmat, support))
+                output.append(spmm(self.adjmat.to(self.device), support.to(self.device)))
             output = torch.stack(output, dim=0)
             if self.bias is not None:
                 output = output + self.bias

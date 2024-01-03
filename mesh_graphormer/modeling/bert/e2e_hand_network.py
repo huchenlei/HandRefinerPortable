@@ -7,17 +7,17 @@ Licensed under the MIT license.
 import torch
 import mesh_graphormer.modeling.data.config as cfg
 
-device = "cuda"
 
 class Graphormer_Hand_Network(torch.nn.Module):
     '''
     End-to-end Graphormer network for hand pose and mesh reconstruction from a single image.
     '''
-    def __init__(self, args, config, backbone, trans_encoder):
+    def __init__(self, args, config, backbone, trans_encoder, device="cuda"):
         super(Graphormer_Hand_Network, self).__init__()
         self.config = config
         self.backbone = backbone
         self.trans_encoder = trans_encoder
+        self.device = device
         self.upsampling = torch.nn.Linear(195, 778)
         self.cam_param_fc = torch.nn.Linear(3, 1)
         self.cam_param_fc2 = torch.nn.Linear(195+21, 150) 
@@ -28,8 +28,8 @@ class Graphormer_Hand_Network(torch.nn.Module):
         batch_size = images.size(0)
         # Generate T-pose template mesh
         template_pose = torch.zeros((1,48))
-        template_pose = template_pose.to(device)
-        template_betas = torch.zeros((1,10)).to(device)
+        template_pose = template_pose.to(self.device)
+        template_betas = torch.zeros((1,10)).to(self.device)
         template_vertices, template_3d_joints = mesh_model.layer(template_pose, template_betas)
         template_vertices = template_vertices/1000.0
         template_3d_joints = template_3d_joints/1000.0
@@ -64,7 +64,7 @@ class Graphormer_Hand_Network(torch.nn.Module):
             # apply mask vertex/joint modeling
             # meta_masks is a tensor of all the masks, randomly generated in dataloader
             # we pre-define a [MASK] token, which is a floating-value vector with 0.01s  
-            special_token = torch.ones_like(features[:,:-49,:]).to(device)*0.01
+            special_token = torch.ones_like(features[:,:-49,:]).to(self.device)*0.01
             features[:,:-49,:] = features[:,:-49,:]*meta_masks + special_token*(1-meta_masks)
 
         # forward pass

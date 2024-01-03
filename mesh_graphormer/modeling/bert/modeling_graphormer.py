@@ -14,12 +14,10 @@ import torch
 from torch import nn
 from .modeling_bert import BertPreTrainedModel, BertEmbeddings, BertPooler, BertIntermediate, BertOutput, BertSelfOutput
 import mesh_graphormer.modeling.data.config as cfg
-from mesh_graphormer.modeling._gcnn import GraphConvolution, GraphResBlock
+from mesh_graphormer.modeling._gcnn import GraphResBlock
 from .modeling_utils import prune_linear_layer
 LayerNormClass = torch.nn.LayerNorm
 BertLayerNorm = torch.nn.LayerNorm
-
-device = "cuda"
 
 
 class BertSelfAttention(nn.Module):
@@ -126,6 +124,7 @@ class GraphormerLayer(nn.Module):
         self.attention = BertAttention(config)
         self.has_graph_conv = config.graph_conv
         self.mesh_type = config.mesh_type
+        self.device = config.device
 
         if self.has_graph_conv == True:
             self.graph_conv = GraphResBlock(config.hidden_size, config.hidden_size, mesh_type=self.mesh_type)
@@ -235,7 +234,7 @@ class EncoderBlock(BertPreTrainedModel):
 
         batch_size = len(img_feats)
         seq_length = len(img_feats[0])
-        input_ids = torch.zeros([batch_size, seq_length],dtype=torch.long).to(device)
+        input_ids = torch.zeros([batch_size, seq_length],dtype=torch.long).to(self.device)
 
         if position_ids is None:
             position_ids = torch.arange(seq_length, dtype=torch.long, device=input_ids.device)
