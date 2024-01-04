@@ -2,34 +2,12 @@ from __future__ import division
 import torch
 import torch.nn.functional as F
 import numpy as np
-import scipy.sparse
 import math
 from pathlib import Path
+from .util import spmm
+
 data_path = Path(__file__).parent / "data"
-
-
 sparse_to_dense = lambda x: x
-
-class SparseMM(torch.autograd.Function):
-    """Redefine sparse @ dense matrix multiplication to enable backpropagation.
-    The builtin matrix multiplication operation does not support backpropagation in some cases.
-    """
-    @staticmethod
-    def forward(ctx, sparse, dense):
-        ctx.req_grad = dense.requires_grad
-        ctx.save_for_backward(sparse)
-        return torch.matmul(sparse, dense)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        grad_input = None
-        sparse, = ctx.saved_tensors
-        if ctx.req_grad:
-            grad_input = torch.matmul(sparse.t(), grad_output)
-        return None, grad_input
-
-def spmm(sparse, dense):
-    return SparseMM.apply(sparse, dense)
 
 
 def gelu(x):
@@ -60,7 +38,7 @@ class GraphResBlock(torch.nn.Module):
     """
     Graph Residual Block similar to the Bottleneck Residual Block in ResNet
     """
-    def __init__(self, in_channels, out_channels, mesh_type='body', device="cuda"):
+    def __init__(self, in_channels, out_channels, mesh_type='body', device=None):
         super(GraphResBlock, self).__init__()
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -87,24 +65,6 @@ class GraphResBlock(torch.nn.Module):
 
         return z
 
-# class GraphResBlock(torch.nn.Module):
-#     """
-#     Graph Residual Block similar to the Bottleneck Residual Block in ResNet
-#     """
-#     def __init__(self, in_channels, out_channels, mesh_type='body'):
-#         super(GraphResBlock, self).__init__()
-#         self.in_channels = in_channels
-#         self.out_channels = out_channels
-#         self.conv = GraphConvolution(self.in_channels, self.out_channels, mesh_type)
-#         print('Use BertLayerNorm and GeLU in GraphResBlock')
-#         self.norm = BertLayerNorm(self.out_channels)
-#     def forward(self, x):
-#         y = self.conv(x)
-#         y = self.norm(y)
-#         y = gelu(y)
-#         z = x+y
-#         return z
-
 class GraphLinear(torch.nn.Module):
     """
     Generalization of 1x1 convolutions on Graphs
@@ -127,7 +87,7 @@ class GraphLinear(torch.nn.Module):
 
 class GraphConvolution(torch.nn.Module):
     """Simple GCN layer, similar to https://arxiv.org/abs/1609.02907."""
-    def __init__(self, in_features, out_features, mesh='body', bias=True, device="cuda"):
+    def __init__(self, in_features, out_features, mesh='body', bias=True, device=None):
         super(GraphConvolution, self).__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -170,7 +130,7 @@ class GraphConvolution(torch.nn.Module):
             for i in range(x.shape[0]):
                 support = torch.matmul(x[i], self.weight)
                 # output.append(torch.matmul(self.adjmat, support))
-                output.append(spmm(self.adjmat.to(self.device), support.to(self.device)))
+                output.append(spmm(self.adjmat, support, self.device))
             output = torch.stack(output, dim=0)
             if self.bias is not None:
                 output = output + self.bias

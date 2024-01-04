@@ -12,11 +12,10 @@ import numpy as np
 import torch
 import torch.nn as nn
 import os.path as osp
-import json
-import code
 from manopth.manolayer import ManoLayer
 import scipy.sparse
 import mesh_graphormer.modeling.data.config as cfg
+from .util import spmm
 from pathlib import Path
 
 
@@ -62,28 +61,6 @@ class MANO(nn.Module):
         """
         joints = torch.einsum('bik,ji->bjk', [vertices, self.joint_regressor_torch])
         return joints
-
-
-class SparseMM(torch.autograd.Function):
-    """Redefine sparse @ dense matrix multiplication to enable backpropagation.
-    The builtin matrix multiplication operation does not support backpropagation in some cases.
-    """
-    @staticmethod
-    def forward(ctx, sparse, dense):
-        ctx.req_grad = dense.requires_grad
-        ctx.save_for_backward(sparse)
-        return torch.matmul(sparse, dense)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        grad_input = None
-        sparse, = ctx.saved_tensors
-        if ctx.req_grad:
-            grad_input = torch.matmul(sparse.t(), grad_output)
-        return None, grad_input
-
-def spmm(sparse, dense):
-    return SparseMM.apply(sparse, dense)
 
 
 def scipy_to_pytorch(A, U, D):
@@ -141,12 +118,13 @@ def get_graph_params(filename, nsize=1):
 class Mesh(object):
     """Mesh object that is used for handling certain graph operations."""
     def __init__(self, filename=cfg.MANO_sampling_matrix,
-                 num_downsampling=1, nsize=1, device=torch.device('cuda')):
+                 num_downsampling=1, nsize=1, device=None):
         self._A, self._U, self._D = get_graph_params(filename=filename, nsize=nsize)
         # self._A = [a.to(device) for a in self._A]
         self._U = [u.to(device) for u in self._U]
         self._D = [d.to(device) for d in self._D]
         self.num_downsampling = num_downsampling
+        self.device = device
 
     def downsample(self, x, n1=0, n2=None):
         """Downsample mesh."""
@@ -154,13 +132,13 @@ class Mesh(object):
             n2 = self.num_downsampling
         if x.ndimension() < 3:
             for i in range(n1, n2):
-                x = spmm(self._D[i], x)
+                x = spmm(self._D[i], x, self.device)
         elif x.ndimension() == 3:
             out = []
             for i in range(x.shape[0]):
                 y = x[i]
                 for j in range(n1, n2):
-                    y = spmm(self._D[j], y)
+                    y = spmm(self._D[j], y, self.device)
                 out.append(y)
             x = torch.stack(out, dim=0)
         return x
@@ -169,13 +147,13 @@ class Mesh(object):
         """Upsample mesh."""
         if x.ndimension() < 3:
             for i in reversed(range(n2, n1)):
-                x = spmm(self._U[i], x)
+                x = spmm(self._U[i], x, self.device)
         elif x.ndimension() == 3:
             out = []
             for i in range(x.shape[0]):
                 y = x[i]
                 for j in reversed(range(n2, n1)):
-                    y = spmm(self._U[j], y)
+                    y = spmm(self._U[j], y, self.device)
                 out.append(y)
             x = torch.stack(out, dim=0)
         return x

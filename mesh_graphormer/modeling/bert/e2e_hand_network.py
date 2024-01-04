@@ -12,7 +12,7 @@ class Graphormer_Hand_Network(torch.nn.Module):
     '''
     End-to-end Graphormer network for hand pose and mesh reconstruction from a single image.
     '''
-    def __init__(self, args, config, backbone, trans_encoder, device="cuda"):
+    def __init__(self, args, config, backbone, trans_encoder, device):
         super(Graphormer_Hand_Network, self).__init__()
         self.config = config
         self.backbone = backbone

@@ -16,6 +16,7 @@ except ImportError:
 
 from mesh_graphormer.utils.geometric_layers import rodrigues
 import mesh_graphormer.modeling.data.config as cfg
+from .util import spmm
 
 
 sparse_to_dense = lambda x: x
@@ -140,27 +141,6 @@ class SMPL(nn.Module):
         joints = torch.einsum('bik,ji->bjk', [vertices, self.J_regressor_h36m_correct])
         return joints
 
-class SparseMM(torch.autograd.Function):
-    """Redefine sparse @ dense matrix multiplication to enable backpropagation.
-    The builtin matrix multiplication operation does not support backpropagation in some cases.
-    """
-    @staticmethod
-    def forward(ctx, sparse, dense):
-        ctx.req_grad = dense.requires_grad
-        ctx.save_for_backward(sparse)
-        return torch.matmul(sparse, dense)
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        grad_input = None
-        sparse, = ctx.saved_tensors
-        if ctx.req_grad:
-            grad_input = torch.matmul(sparse.t(), grad_output)
-        return None, grad_input
-
-def spmm(sparse, dense):
-    return SparseMM.apply(sparse, dense)
-
 
 def scipy_to_pytorch(A, U, D):
     """Convert scipy sparse matrices to pytorch sparse matrix."""
@@ -217,7 +197,7 @@ def get_graph_params(filename, nsize=1):
 class Mesh(object):
     """Mesh object that is used for handling certain graph operations."""
     def __init__(self, filename=cfg.SMPL_sampling_matrix,
-                 num_downsampling=1, nsize=1, device=torch.device('cuda')):
+                 num_downsampling=1, nsize=1, device=None):
         self._A, self._U, self._D = get_graph_params(filename=filename, nsize=nsize)
         # self._A = [a.to(device) for a in self._A]
         self._U = [u.to(device) for u in self._U]
@@ -233,18 +213,14 @@ class Mesh(object):
 
         self._ref_vertices = ref_vertices.to(device)
         self.faces = smpl.faces.int().to(device)
-
-    # @property
-    # def adjmat(self):
-    #     """Return the graph adjacency matrix at the specified subsampling level."""
-    #     return self._A[self.num_downsampling].float()
+        self.device = device
 
     @property
     def ref_vertices(self):
         """Return the template vertices at the specified subsampling level."""
         ref_vertices = self._ref_vertices
         for i in range(self.num_downsampling):
-            ref_vertices = torch.spmm(self._D[i], ref_vertices)
+            ref_vertices = torch.spmm(self._D[i], ref_vertices, self.device)
         return ref_vertices
 
     def downsample(self, x, n1=0, n2=None):
@@ -253,13 +229,13 @@ class Mesh(object):
             n2 = self.num_downsampling
         if x.ndimension() < 3:
             for i in range(n1, n2):
-                x = spmm(self._D[i], x)
+                x = spmm(self._D[i], x, self.device)
         elif x.ndimension() == 3:
             out = []
             for i in range(x.shape[0]):
                 y = x[i]
                 for j in range(n1, n2):
-                    y = spmm(self._D[j], y)
+                    y = spmm(self._D[j], y, self.device)
                 out.append(y)
             x = torch.stack(out, dim=0)
         return x
@@ -268,13 +244,13 @@ class Mesh(object):
         """Upsample mesh."""
         if x.ndimension() < 3:
             for i in reversed(range(n2, n1)):
-                x = spmm(self._U[i], x)
+                x = spmm(self._U[i], x, self.device)
         elif x.ndimension() == 3:
             out = []
             for i in range(x.shape[0]):
                 y = x[i]
                 for j in reversed(range(n2, n1)):
-                    y = spmm(self._U[j], y)
+                    y = spmm(self._U[j], y, self.device)
                 out.append(y)
             x = torch.stack(out, dim=0)
         return x

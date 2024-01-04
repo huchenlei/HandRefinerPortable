@@ -127,7 +127,12 @@ class GraphormerLayer(nn.Module):
         self.device = config.device
 
         if self.has_graph_conv == True:
-            self.graph_conv = GraphResBlock(config.hidden_size, config.hidden_size, mesh_type=self.mesh_type)
+            self.graph_conv = GraphResBlock(
+                config.hidden_size,
+                config.hidden_size,
+                mesh_type=self.mesh_type,
+                device=self.device,
+            )
         
         self.intermediate = BertIntermediate(config)
         self.output = BertOutput(config)

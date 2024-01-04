@@ -8,7 +8,7 @@ class MeshGraphormerDetector:
         self.pipeline = pipeline
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_or_path, filename=None, hrnet_filename=None, cache_dir=None, device="cuda"):
+    def from_pretrained(cls, pretrained_model_or_path, filename=None, hrnet_filename=None, cache_dir=None, device=None):
         filename = filename or "graphormer_hand_state_dict.bin"
         hrnet_filename = hrnet_filename or "hrnetv2_w64_imagenet_pretrained.pth"
         args.resume_checkpoint = custom_hf_download(pretrained_model_or_path, filename, cache_dir)
