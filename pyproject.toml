@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "handrefinerportable"
+readme = "README.md"
+version = "2024.01.18.0"
+dependencies = [
+    "rtree",
+    "mediapipe",
+    "trimesh[easy]",
+]
+
+[project.urls]
+Documentation = "https://github.com/huchenlei/HandRefinerPortable"
+Issues = "https://github.com/huchenlei/HandRefinerPortable/issues"
+Source = "https://github.com/huchenlei/HandRefinerPortable"
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "hand_refiner",
+    "manopth",
+    "mesh_graphormer",
+]
