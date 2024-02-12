@@ -188,7 +188,7 @@ class MeshGraphormerMediapipe(Preprocessor):
                         mean=[0.485, 0.456, 0.406],
                         std=[0.229, 0.224, 0.225])])
         
-        base_options = python.BaseOptions(model_asset_path=str( Path(__file__).parent / "hand_landmarker.task" ))
+        base_options = python.BaseOptions(model_asset_buffer=(Path(__file__).parent / "hand_landmarker.task").read_bytes())
         options = vision.HandLandmarkerOptions(base_options=base_options,
                                             min_hand_detection_confidence=0.6,
                                             min_hand_presence_confidence=0.6,
